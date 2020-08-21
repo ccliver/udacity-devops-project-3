@@ -93,6 +93,54 @@ resource "aws_security_group" "jenkins" {
   }
 }
 
+resource "aws_iam_instance_profile" "jenkins" {
+  name = var.project_name
+  role = aws_iam_role.jenkins.name
+}
+
+resource "aws_iam_role" "jenkins" {
+  name = var.project_name
+  path = "/"
+
+  assume_role_policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": "sts:AssumeRole",
+            "Principal": {
+               "Service": "ec2.amazonaws.com"
+            },
+            "Effect": "Allow",
+            "Sid": ""
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "jenkins" {
+  name = var.project_name
+  path = "/"
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "001",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "${aws_s3_bucket.app.arn}",
+        "${aws_s3_bucket.app.arn}/*"
+      ]
+    }
+  ]
+}
+EOF
+}
+
 resource "aws_instance" "jenkins" {
   ami                         = data.aws_ami.ubuntu.id
   instance_type               = "t3.small"
@@ -107,7 +155,7 @@ resource "aws_instance" "jenkins" {
     wget -q -O - https://pkg.jenkins.io/debian/jenkins.io.key | sudo apt-key add -
     echo 'deb https://pkg.jenkins.io/debian-stable binary/' > /etc/apt/sources.list.d/jenkins.list
     apt-get update
-    apt-get install -y jenkins
+    apt-get install -y jenkins tidy
     systemctl start jenkins
     systemctl enable jenkins
     systemctl status jenkins
@@ -116,4 +164,13 @@ resource "aws_instance" "jenkins" {
   tags = {
     Name = "${var.project_name}-jenkins"
   }
+
+  lifecycle {
+    ignore_changes = [user_data]
+  }
+}
+
+resource "aws_s3_bucket" "app" {
+    bucket = "${var.project_name}-app"
+    acl    = "private"
 }
